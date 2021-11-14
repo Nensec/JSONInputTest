@@ -1,0 +1,159 @@
+﻿@{
+    ViewBag.Title = "Home Page";
+}
+
+@{
+    var keyData = typeof(TestModel).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance).Select(GetTypeInfo).ToList();
+}
+
+<div class="row" style="padding-top:20px">
+    <div class="col-md-4">
+        <textarea rows="10" id="jsonInput" class="form-control" style="max-width:unset;">
+{
+
+}
+        </textarea>
+    </div>
+    <div class="col-md-8">
+        <div class="col-md-6">
+            <label for="keySelector">Key</label>
+            <input id="keySelector" type="text" list="keySelect" class="form-control" />
+            <datalist id="keySelect">
+                @foreach (var key in keyData)
+                {
+                    <option value="@key.name" data-type="@key.dataType" data-isenum="@(key.enumType != null)" data-isarray="@key.isArray">@key.name</option>
+                }
+            </datalist>
+        </div>
+        <div class="col-md-6">
+            <label for="keySelector">Value</label>
+            <div class="input" style="display:none;" id="textInput">
+                <input class="value form-control" type="text" />
+            </div>
+            <div class="input" style="display:none;" id="numericInput">
+                <input class="value form-control" type="number" />
+            </div>
+            <div class="input" style="display:none;" id="enumInput">
+                <select class="value form-control">
+                </select>
+            </div>
+            <div class="input" style="display:none;" id="boolInput">
+                <input type="checkbox" class="value" />
+            </div>
+            <div class="input" style="display:none;" id="arrayInput">
+
+            </div>
+        </div>
+        <div class="col-md-12">
+            <button class="pull-right btn btn-primary" type="button" onclick="addToJson()">Add</button>
+        </div>
+    </div>
+</div>
+
+@section Scripts
+{
+    <script>
+        $("input").on('input', function () {
+            var inputValue = this.value;
+            var inputOption;
+            if ($('datalist').find('option').filter(function (_, option) {
+                if (this.value == inputValue) {
+                    inputOption = option;
+                    return true;
+                }
+                return false;
+            }).length) {
+                $('.input').hide();
+                if (inputOption.dataset.isenum === "True") {
+                    $('#enumInput select').find('option').remove();
+                    $.each(enumData[inputOption.dataset.type], (_, value) => $('#enumInput select').append(`<option value="${value}">${value}</option>`));
+                    $('#enumInput').show();
+                }
+                else if (inputOption.dataset.isarray === "True") {
+                    $('#arrayInput').show();
+                }
+                else {
+                    switch (inputOption.dataset.type) {
+                        case 'numeric':
+                            $('#numericInput').show();
+                            break;
+                        case 'boolean':
+                            $('#boolInput').show();
+                            break;
+                        default:
+                        case 'text':
+                            $('#textInput').show();
+                            break;
+                    }
+                }
+            }
+        });
+    </script>
+}
+
+<script>
+    addToJson = () => {
+        var curPos = document.getElementById("jsonInput").selectionStart;
+        let x = $('#jsonInput').val();
+        var input = $('.input:visible');
+        let text_to_insert = `"${$('#keySelector').val()}": `;
+        switch (input.attr('id')) {
+            case 'arrayInput':
+                text_to_insert += '[\n]';
+                break;
+            case 'numericInput':
+                text_to_insert += $('.value', input).val();
+                break;
+            case 'boolInput':
+                text_to_insert += `"${$('.value', input).is(':checked')}"`;
+                $('.value', input).prop('checked', false);
+                break;
+            default:
+                text_to_insert += `"${$('.value', input).val()}"`;
+                break;
+        }
+        $('#jsonInput').val(x.slice(0, curPos) + text_to_insert + x.slice(curPos));
+        $('.input:visible .value').val('');
+        input.hide();
+        $('#keySelector').val('');
+    }
+
+    var enumData = {};
+    @foreach(var key in keyData.Where(x => x.enumType != null))
+    {
+        @:enumData.@(key.name) = [@Html.Raw(string.Join(",", Enum.GetValues(key.enumType).Cast<Enum>().Select(x => $"'{x}'")))];
+    }
+</script>
+
+@{
+    (string name, string dataType, Type enumType, bool isArray) GetTypeInfo(System.Reflection.PropertyInfo info)
+    {
+        Type type = null;
+
+        if ((type = Nullable.GetUnderlyingType(info.PropertyType)) == null)
+        {
+            type = info.PropertyType;
+        }
+
+        if (type.IsEnum)
+        {
+            return (info.Name, type.Name, type, false);
+        }
+
+        if (typeof(System.Collections.IList).IsAssignableFrom(type))
+        {
+            return (info.Name, type.GenericTypeArguments[0].Name, null, true);
+        }
+
+        switch (type.Name)
+        {
+            case nameof(Decimal):
+                return (info.Name, "numeric", null, false);
+            case nameof(Boolean):
+                return (info.Name, "boolean", null, false);
+            case nameof(String):
+            default:
+                return (info.Name, "text", null, false);
+        }
+    }
+}
